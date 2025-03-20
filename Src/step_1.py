@@ -107,5 +107,5 @@ save_params(rvecs, tvecs, K, dist)
 # print("ret = ", ret)
 # print("K = ", K) # intrinsic matrix
 # print("dist = ", dist) # lens distortion
-# print("rvecs = ", rvecs) # rotation vectors voor elke img
-# print("tvecs = ", tvecs) # translation vectors voor elke img
+print("rvecs = ", rvecs) # rotation vectors voor elke img
+print("tvecs = ", tvecs) # translation vectors voor elke img
