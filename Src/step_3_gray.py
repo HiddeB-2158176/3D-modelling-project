@@ -176,24 +176,15 @@ def triangulate_manual(pts1, pts2, K, R, T):
 
     return np.array(points_3D)
 
-def visualize_3D_points(points_3D, colors):
+def visualize_3D_points(points_3D):
     """
-    Visualiseer 3D punten met Open3D, met behoud van kleurinformatie.
-    
-    :param points_3D: Nx3 numpy array van 3D punten.
-    :param colors: Nx3 numpy array van RGB kleuren in [0, 255] range.
+    Visualiseer 3D punten met Open3D.
     """
-    if len(points_3D) == 0 or len(colors) == 0:
-        print("Geen punten om te visualiseren.")
-        return
-
-    # Maak een Open3D PointCloud object
     pcd = o3d.geometry.PointCloud()
     pcd.points = o3d.utility.Vector3dVector(points_3D)
 
-    # Controleer of kleuren correct zijn en normaliseer
-    colors = np.array(colors, dtype=np.float32) / 255.0  # Normeer naar [0,1]
-    pcd.colors = o3d.utility.Vector3dVector(colors)
+    # Maak de punten zichtbaar als witte bolletjes
+    pcd.paint_uniform_color([1, 0, 0])
 
     # Visualisatie starten
     o3d.visualization.draw_geometries([pcd])
@@ -207,8 +198,8 @@ images_view1 = glob.glob('../Data/GrayCodes/view1/*.jpg')
 images0 = []
 images1 = []
 for i in range(len(images_view0)):
-    resized0 = cv2.resize(cv2.imread(images_view0[i], cv2.IMREAD_COLOR), (1920, 1080))
-    resized1 = cv2.resize(cv2.imread(images_view1[i], cv2.IMREAD_COLOR), (1920, 1080))
+    resized0 = cv2.resize(cv2.imread(images_view0[i], cv2.IMREAD_GRAYSCALE), (1920, 1080))
+    resized1 = cv2.resize(cv2.imread(images_view1[i], cv2.IMREAD_GRAYSCALE), (1920, 1080))
     images0.append(resized0)
     images1.append(resized1)
 
@@ -218,7 +209,7 @@ result1 = decode_gray_pattern(images1)
 img1 = images0[0]
 img2 = images1[0]
 
-keypoints1, keypoints2, matches, colors = find_correspondences(result0, result1)
+keypoints1, keypoints2, matches = find_correspondences(result0, result1)
 
 # draw_matched_correspondences(img1, img2, keypoints1, keypoints2, matches)
 
@@ -245,4 +236,4 @@ print("3D punten (OpenCV triangulatePoints):\n", points_3D_opencv)
 print("3D punten (Manuele SVD triangulatie):\n", points_3D_manual)
 
 # 3D punten visualiseren
-visualize_3D_points(points_3D_opencv, colors)
+visualize_3D_points(points_3D_opencv)
