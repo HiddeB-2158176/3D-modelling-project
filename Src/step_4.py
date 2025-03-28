@@ -37,109 +37,137 @@ def visualize_depth_map(depthMap):
     plt.colorbar()
     plt.show()
 
-# def interpolate_camera_view(R1, R2, t1, t2, alpha):
-#     # Convert matrices to Rotation objects
-#     r1 = ScipyRotation.from_matrix(R1)
-#     r2 = ScipyRotation.from_matrix(R2)
+def interpolate_camera_view_static(R1, R2, t1, t2, alpha, lateral_offset=0):
+    # Convert matrices to Rotation objects
+    r1 = ScipyRotation.from_matrix(R1)
+    r2 = ScipyRotation.from_matrix(R2)
     
-#     # Create a consolidated rotations object with both rotations
-#     key_rots = ScipyRotation.from_matrix(np.stack([R1, R2]))
+    # Create a consolidated rotations object with both rotations
+    key_rots = ScipyRotation.from_matrix(np.stack([R1, R2]))
     
-#     # Create times for the two rotations
-#     key_times = [0, 1]
+    # Create times for the two rotations
+    key_times = [0, 1]
     
-#     # Create a Slerp object
-#     slerp = Slerp(key_times, key_rots)
+    # Create a Slerp object
+    slerp = Slerp(key_times, key_rots)
     
-#     # Get interpolated rotation at the given alpha
-#     r_interp = slerp([alpha])[0]
+    # Get interpolated rotation at the given alpha
+    r_interp = slerp([alpha])[0]
     
-#     # Interpolate translation
-#     t_interp = (1 - alpha) * t1 + alpha * t2
+    # Interpolate translation
+    t_interp = (1 - alpha) * t1 + alpha * t2
     
-#     return r_interp.as_matrix(), t_interp
+    # Apply lateral movement (perpendicular to viewing direction)
+    if lateral_offset != 0:
+        # Get the current view direction (Z-axis of the camera)
+        view_dir = r_interp.as_matrix()[:, 2]
+        
+        # Get the right vector (X-axis of the camera)
+        right_vector = r_interp.as_matrix()[:, 0]
+        
+        # Apply lateral offset along the right vector
+        t_interp = t_interp + lateral_offset * right_vector.reshape(3, 1)
+    
+    return r_interp.as_matrix(), t_interp
 
-# def switch_camera_view(R, T, K, pts1, pts2, points_3D, colors, img_shape):
-#     alpha = 0.0  # Interpolation factor
-#     R_base, T_base = np.eye(3), np.zeros((3, 1))  # Initial camera pose
+def switch_camera_view_static(R, T, K, pts1, pts2, points_3D, colors, img_shape):
+    alpha = 0.0       # Forward/backward interpolation factor
+    lateral = 0.0     # Left/right movement factor
+    R_base, T_base = np.eye(3), np.zeros((3, 1))  # Initial camera pose
     
-#     # Create initial depth map
-#     depth_map = create_depth_map(points_3D, colors, img_shape, pts1)
-#     depth_map_colored = cv2.applyColorMap(depth_map, cv2.COLORMAP_JET)
+    # Create initial depth map
+    depth_map = create_depth_map(points_3D, colors, img_shape, pts1)
+    depth_map_colored = cv2.applyColorMap(depth_map, cv2.COLORMAP_JET)
     
-#     print("Depth map viewer started. Press A/D to move, ESC to exit.")
+    print("Depth map viewer started. Press A/D to move forward/backward, W/S to move left/right, ESC to exit.")
     
-#     change_view = False  # Flag to indicate if view needs to be updated
+    change_view = False  # Flag to indicate if view needs to be updated
     
-#     while True:
-#         # Display current depth map with instructions
-#         info_display = depth_map_colored.copy()
-#         cv2.putText(info_display, "Press A/D to Move, ESC to Exit", (10, 30), 
-#                     cv2.FONT_HERSHEY_SIMPLEX, 0.7, (255, 255, 255), 2)
-#         cv2.putText(info_display, f"Alpha: {alpha:.1f}", (10, 60), 
-#                     cv2.FONT_HERSHEY_SIMPLEX, 0.7, (255, 255, 255), 2)
+    while True:
+        # Display current depth map with instructions
+        info_display = depth_map_colored.copy()
+        cv2.putText(info_display, "A/D: Forward/Back, W/S: Left/Right, ESC: Exit", (10, 30), 
+                    cv2.FONT_HERSHEY_SIMPLEX, 0.7, (255, 255, 255), 2)
+        cv2.putText(info_display, f"Alpha: {alpha:.1f}, Lateral: {lateral:.3f}", (10, 60), 
+                    cv2.FONT_HERSHEY_SIMPLEX, 0.7, (255, 255, 255), 2)
         
-#         cv2.imshow("Depth Map", info_display)
+        # Add color scale legend
+        info_display = add_color_scale(info_display)
         
-#         # Use a shorter wait time for more responsive keyboard input
-#         key = cv2.waitKey(30) & 0xFF
+        cv2.imshow("Depth Map", info_display)
         
-#         if key == 27:  # ESC to exit
-#             print("Exiting depth map viewer.")
-#             break
+        # Use a shorter wait time for more responsive keyboard input
+        key = cv2.waitKey(30) & 0xFF
+        
+        if key == 27:  # ESC to exit
+            print("Exiting depth map viewer.")
+            break
             
-#         elif key == ord('d'):  # Move forward
-#             print("Moving forward. Alpha =", min(alpha + 0.1, 1.0))
-#             alpha = min(alpha + 0.1, 1.0)
-#             change_view = True
+        elif key == ord('d'):  # Move forward
+            print("Moving forward. Alpha =", min(alpha + 0.1, 1.0))
+            alpha = min(alpha + 0.1, 1.0)
+            change_view = True
             
-#         elif key == ord('a'):  # Move backward
-#             print("Moving backward. Alpha =", max(alpha - 0.1, 0.0))
-#             alpha = max(alpha - 0.1, 0.0)
-#             change_view = True
+        elif key == ord('a'):  # Move backward
+            print("Moving backward. Alpha =", max(alpha - 0.1, 0.0))
+            alpha = max(alpha - 0.1, 0.0)
+            change_view = True
+            
+        elif key == ord('w'):  # Move left
+            print("Moving left. Lateral =", lateral - 0.1)
+            lateral -= 0.1
+            change_view = True
+            
+        elif key == ord('s'):  # Move right
+            print("Moving right. Lateral =", lateral + 0.1)
+            lateral += 0.1
+            change_view = True
         
-#         # Only update view when needed (when a key is pressed)
-#         if change_view:
-#             print("key pressed")
-#             try:
-#                 # Update the view
-#                 R_new, T_new = interpolate_camera_view(R_base, R, T_base, T.reshape(3, 1), alpha)
-#                 print("R_new")
-#                 # Recompute 3D points with the interpolated camera pose
-#                 new_points_3D = triangulate_opencv(pts1, pts2, K, R_new, T_new)
-#                 print("new_points_3D")
-#                 # Check if triangulation produced valid points
-#                 if np.isnan(new_points_3D).any() or np.isinf(new_points_3D).any():
-#                     print("Warning: Some points have invalid coordinates (NaN or Inf)")
-#                     # Filter out invalid points
-#                     valid_indices = ~(np.isnan(new_points_3D).any(axis=1) | np.isinf(new_points_3D).any(axis=1))
-#                     new_points_3D = new_points_3D[valid_indices]
-#                     colors_filtered = colors[valid_indices]
-#                     pts1_filtered = pts1[valid_indices]
-#                     depth_map = create_depth_map(new_points_3D, colors_filtered, img_shape, pts1_filtered)
-#                 else:
-#                     print("in else")
-#                     depth_map = create_depth_map(new_points_3D, colors, img_shape, pts1)
+        # Only update view when needed (when a key is pressed)
+        if change_view:
+            print("key pressed")
+            try:
+                # Update the view with both forward/backward and lateral movement
+                R_new, T_new = interpolate_camera_view_static(R_base, R, T_base, T.reshape(3, 1), alpha, lateral)
+                print("R_new calculated")
                 
-#                 depth_map_colored = cv2.applyColorMap(depth_map, cv2.COLORMAP_JET)
-#                 print("depth_map_colored")
-#                 change_view = False  # Reset flag after update
+                # Recompute 3D points with the interpolated camera pose
+                new_points_3D = triangulate_opencv(pts1, pts2, K, R_new, T_new)
+                print("new_points_3D calculated")
                 
-#             except Exception as e:
-#                 print(f"Error during camera view update: {e}")
-#                 # If there's an error, reset to original position
-#                 alpha = 0.0
-#                 depth_map = create_depth_map(points_3D, colors, img_shape, pts1)
-#                 depth_map_colored = cv2.applyColorMap(depth_map, cv2.COLORMAP_JET)
-#                 change_view = False
+                # Check if triangulation produced valid points
+                if np.isnan(new_points_3D).any() or np.isinf(new_points_3D).any():
+                    print("Warning: Some points have invalid coordinates (NaN or Inf)")
+                    # Filter out invalid points
+                    valid_indices = ~(np.isnan(new_points_3D).any(axis=1) | np.isinf(new_points_3D).any(axis=1))
+                    new_points_3D = new_points_3D[valid_indices]
+                    colors_filtered = colors[valid_indices]
+                    pts1_filtered = pts1[valid_indices]
+                    depth_map = create_depth_map(new_points_3D, colors_filtered, img_shape, pts1_filtered)
+                else:
+                    print("Creating depth map with valid points")
+                    depth_map = create_depth_map(new_points_3D, colors, img_shape, pts1)
+                
+                depth_map_colored = cv2.applyColorMap(depth_map, cv2.COLORMAP_JET)
+                print("Depth map colored")
+                change_view = False  # Reset flag after update
+                
+            except Exception as e:
+                print(f"Error during camera view update: {e}")
+                # If there's an error, reset to original position
+                alpha = 0.0
+                lateral = 0.0
+                depth_map = create_depth_map(points_3D, colors, img_shape, pts1)
+                depth_map_colored = cv2.applyColorMap(depth_map, cv2.COLORMAP_JET)
+                change_view = False
     
-#     # Clean up properly to ensure window closes
-#     cv2.destroyWindow("Depth Map")
-#     cv2.waitKey(1)  # Give time for window destruction
-#     cv2.destroyAllWindows()
-#     cv2.waitKey(1)
+    # Clean up properly to ensure window closes
+    cv2.destroyWindow("Depth Map")
+    cv2.waitKey(1)  # Give time for window destruction
+    cv2.destroyAllWindows()
+    cv2.waitKey(1)
 
-def interpolate_camera_view(R1, R2, t1, t2, alpha, lateral_offset=0):
+def interpolate_camera_view_dynamic(R1, R2, t1, t2, alpha, lateral_offset=0):
     # Convert matrices to Rotation objects
     r1 = ScipyRotation.from_matrix(R1)
     r2 = ScipyRotation.from_matrix(R2)
@@ -203,7 +231,7 @@ def add_color_scale(image):
     
     return image
 
-def switch_camera_view(R, T, K, pts1, pts2, points_3D, colors, img_shape):
+def switch_camera_view_dynamic(R, T, K, pts1, pts2, points_3D, colors, img_shape):
     alpha = 0.0       # Forward/backward interpolation factor
     lateral = 0.0     # Left/right movement factor
     R_base, T_base = np.eye(3), np.zeros((3, 1))  # Initial camera pose
@@ -215,6 +243,9 @@ def switch_camera_view(R, T, K, pts1, pts2, points_3D, colors, img_shape):
     print("Depth map viewer started. Press A/D to move forward/backward, W/S to move left/right, ESC to exit.")
     
     change_view = False  # Flag to indicate if view needs to be updated
+    
+    # Store original parameters
+    original_points_3D = points_3D.copy()
     
     while True:
         # Display current depth map with instructions
@@ -247,36 +278,62 @@ def switch_camera_view(R, T, K, pts1, pts2, points_3D, colors, img_shape):
             change_view = True
             
         elif key == ord('w'):  # Move left
-            print("Moving left. Lateral =", lateral - 0.1)
-            lateral -= 0.1
+            print("Moving left. Lateral =", lateral - 0.25)
+            lateral -= 0.025
             change_view = True
             
         elif key == ord('s'):  # Move right
-            print("Moving right. Lateral =", lateral + 0.1)
-            lateral += 0.1
+            print("Moving right. Lateral =", lateral + 0.25)
+            lateral += 0.025
             change_view = True
         
         # Only update view when needed (when a key is pressed)
         if change_view:
             try:
                 # Update the view with both forward/backward and lateral movement
-                R_new, T_new = interpolate_camera_view(R_base, R, T_base, T.reshape(3, 1), alpha, lateral)
+                R_new, T_new = interpolate_camera_view_dynamic(R_base, R, T_base, T.reshape(3, 1), alpha, lateral)
                 
-                # Recompute 3D points with the interpolated camera pose
-                new_points_3D = triangulate_opencv(pts1, pts2, K, R_new, T_new)
+                # Instead of triangulating, transform the original 3D points to the new viewpoint
+                # This is more efficient and gives a better sense of the actual camera movement
                 
-                # Check if triangulation produced valid points
-                if np.isnan(new_points_3D).any() or np.isinf(new_points_3D).any():
-                    print("Warning: Some points have invalid coordinates (NaN or Inf)")
-                    # Filter out invalid points
-                    valid_indices = ~(np.isnan(new_points_3D).any(axis=1) | np.isinf(new_points_3D).any(axis=1))
-                    new_points_3D = new_points_3D[valid_indices]
-                    colors_filtered = colors[valid_indices]
-                    pts1_filtered = pts1[valid_indices]
-                    depth_map = create_depth_map(new_points_3D, colors_filtered, img_shape, pts1_filtered)
-                else:
-                    depth_map = create_depth_map(new_points_3D, colors, img_shape, pts1)
+                # Create the transformation matrix from the new camera pose
+                R_transform = R_new.T  # Transpose for inverse rotation
+                T_transform = -np.dot(R_transform, T_new)  # Translation in the rotated frame
                 
+                # Create 4x4 transformation matrix
+                transform = np.eye(4)
+                transform[:3, :3] = R_transform
+                transform[:3, 3] = T_transform.flatten()
+                
+                # Apply transformation to original 3D points
+                # Convert to homogeneous coordinates
+                points_homogeneous = np.hstack((original_points_3D, np.ones((original_points_3D.shape[0], 1))))
+                transformed_points = np.dot(points_homogeneous, transform.T)
+                new_points_3D = transformed_points[:, :3]  # Convert back to 3D
+                
+                # Project the transformed 3D points to 2D to get new pixel locations
+                projected_pts = []
+                for point in new_points_3D:
+                    # Project 3D point to 2D using the camera matrix
+                    point_homogeneous = np.append(point, 1)
+                    projected = np.dot(K, point_homogeneous[:3])
+                    if projected[2] != 0:  # Avoid division by zero
+                        x, y = projected[0] / projected[2], projected[1] / projected[2]
+                        projected_pts.append([x, y])
+                    else:
+                        projected_pts.append([0, 0])  # Fallback for invalid points
+                
+                projected_pts = np.array(projected_pts)
+                
+                # Create depth map from transformed points and projected coordinates
+                depth_map = np.zeros(img_shape[:2], dtype=np.float32)
+                for (x, y), point, color in zip(projected_pts.astype(int), new_points_3D, colors):
+                    if 0 <= y < img_shape[0] and 0 <= x < img_shape[1]:
+                        # Use transformed Z coordinate for depth
+                        depth_map[y, x] = point[2]
+                
+                # Normalize the depth map
+                depth_map = cv2.normalize(depth_map, None, 0, 255, cv2.NORM_MINMAX, dtype=cv2.CV_8U)
                 depth_map_colored = cv2.applyColorMap(depth_map, cv2.COLORMAP_JET)
                 change_view = False  # Reset flag after update
                 
@@ -334,5 +391,6 @@ if __name__ == "__main__":
     depthMap = create_depth_map(points_3D_manual, colors, img1Color.shape, pts1)
     visualize_depth_map(depthMap)
 
-    switch_camera_view(R, T, K, pts1, pts2, points_3D_manual, colors, img1Color.shape)
+    switch_camera_view_static(R, T, K, pts1, pts2, points_3D_manual, colors, img1Color.shape)
+    switch_camera_view_dynamic(R, T, K, pts1, pts2, points_3D_manual, colors, img1Color.shape)
 
