@@ -7,7 +7,7 @@ import random
 import open3d as o3d
 
 #import step_2.py file from same folder
-from step_2 import get_diff, validate_pixels, decode_gray_pattern, find_correspondences, draw_matched_correspondences
+from step_2 import decode_gray_pattern, find_correspondences
 
 def compute_essential_matrix(keypoints1, keypoints2, matches, K):
     """
@@ -230,55 +230,56 @@ def get_colors(img1, img2, pts1, pts2):
     colors = np.array(colors, dtype=np.float32) / 255.0  # Normalize to range [0,1]
     return colors
 
-gce = GrayCodeEncoder.GrayCodeEncoder(1920, 1080, 10)
+if __name__ == "__main__":
+    images_view0 = glob.glob('../Data/GrayCodes/view0/*.jpg')
+    images_view1 = glob.glob('../Data/GrayCodes/view1/*.jpg')
 
-images_view0 = glob.glob('../Data/GrayCodes/view0/*.jpg')
-images_view1 = glob.glob('../Data/GrayCodes/view1/*.jpg')
+    images0 = []
+    images1 = []
+    for i in range(len(images_view0)):
+        resized0 = cv2.resize(cv2.imread(images_view0[i], cv2.IMREAD_GRAYSCALE), (1920, 1080))
+        resized1 = cv2.resize(cv2.imread(images_view1[i], cv2.IMREAD_GRAYSCALE), (1920, 1080))
+        images0.append(resized0)
+        images1.append(resized1)
 
-images0 = []
-images1 = []
-for i in range(len(images_view0)):
-    resized0 = cv2.resize(cv2.imread(images_view0[i], cv2.IMREAD_GRAYSCALE), (1920, 1080))
-    resized1 = cv2.resize(cv2.imread(images_view1[i], cv2.IMREAD_GRAYSCALE), (1920, 1080))
-    images0.append(resized0)
-    images1.append(resized1)
+    result0 = decode_gray_pattern(images0)
+    result1 = decode_gray_pattern(images1)
 
-result0 = decode_gray_pattern(images0)
-result1 = decode_gray_pattern(images1)
+    img1 = images0[0]
+    img2 = images1[0]
 
-img1 = images0[0]
-img2 = images1[0]
+    img1Color = cv2.resize(cv2.imread(images_view0[0], cv2.IMREAD_COLOR), (1920, 1080))
+    img2Color = cv2.resize(cv2.imread(images_view1[0], cv2.IMREAD_COLOR), (1920, 1080))
 
-img1Color = cv2.resize(cv2.imread(images_view0[0], cv2.IMREAD_COLOR), (1920, 1080))
-img2Color = cv2.resize(cv2.imread(images_view1[0], cv2.IMREAD_COLOR), (1920, 1080))
+    keypoints1, keypoints2, matches = find_correspondences(result0, result1)
 
-keypoints1, keypoints2, matches = find_correspondences(result0, result1)
+    # draw_matched_correspondences(img1, img2, keypoints1, keypoints2, matches)
 
-# draw_matched_correspondences(img1, img2, keypoints1, keypoints2, matches)
+    K = np.array([[9.51663140e+03, 0.00000000e+00, 2.81762458e+03],[0.00000000e+00, 8.86527952e+03, 1.14812762e+03],[0.00000000e+00, 0.00000000e+00, 1.00000000e+00]])
 
-K = np.array([[9.51663140e+03, 0.00000000e+00, 2.81762458e+03],[0.00000000e+00, 8.86527952e+03, 1.14812762e+03],[0.00000000e+00, 0.00000000e+00, 1.00000000e+00]])
+    E, mask, pts1, pts2 = compute_essential_matrix(keypoints1, keypoints2, matches, K)
 
-E, mask, pts1, pts2 = compute_essential_matrix(keypoints1, keypoints2, matches, K)
+    # R = rotatie vector
+    # T = translatie vector
+    _, R, T, mask = cv2.recoverPose(E, pts1, pts2, K)
 
-# R = rotatie vector
-# T = translatie vector
-_, R, T, mask = cv2.recoverPose(E, pts1, pts2, K)
+    visualize_cameras_axises(R, T)
+    visualize_cameras_pyramids(R, T)
 
-visualize_cameras_axises(R, T)
-visualize_cameras_pyramids(R, T)
+    points_3D_opencv = triangulate_opencv(pts1, pts2, K, R, T)
+    points_3D_manual = triangulate_manual(pts1, pts2, K, R, T)
 
-points_3D_opencv = triangulate_opencv(pts1, pts2, K, R, T)
-points_3D_manual = triangulate_manual(pts1, pts2, K, R, T)
+    # cv2.imshow('img1', img1Color)
+    # cv2.waitKey(0)
+    # cv2.destroyAllWindows()
 
-# cv2.imshow('img1', img1Color)
-# cv2.waitKey(0)
-# cv2.destroyAllWindows()
+    # cv2.imshow('img2', img2Color)
+    # cv2.waitKey(0)
+    # cv2.destroyAllWindows()
 
-# cv2.imshow('img2', img2Color)
-# cv2.waitKey(0)
-# cv2.destroyAllWindows()
+    colors = get_colors(img1Color, img2Color, pts1, pts2)
 
-colors = get_colors(img1Color, img2Color, pts1, pts2)
+    # 3D punten visualiseren
+    visualize_3D_points(points_3D_manual, colors)
 
-# 3D punten visualiseren
-visualize_3D_points(points_3D_manual, colors)
+
