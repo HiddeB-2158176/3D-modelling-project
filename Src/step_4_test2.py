@@ -12,7 +12,6 @@ from scipy.spatial.transform import Slerp
 from step_2 import decode_gray_pattern, find_correspondences
 from step_3 import compute_essential_matrix, triangulate_opencv, triangulate_manual, get_colors
 
-
 # Create a depth map from the 3D points
 def create_depth_map(points_3D, colors, img_shape, pts1):
     """
@@ -348,226 +347,293 @@ def switch_camera_view_dynamic(R, T, K, pts1, pts2, points_3D, colors, img_shape
     cv2.destroyAllWindows()
     cv2.waitKey(1)
 
-# def plane_sweep(R, T, K, img1, img2, disparity_range=20):
-#     """
-#     Perform plane sweeping to create a depth map.
+import numpy as np
+
+def compute_scene_center_depth(points_3d, projection_matrix):
+    """
+    Computes the center of the point cloud and its depth in the camera view.
+
+    Args:
+        points_3d (np.ndarray): Nx3 array of 3D points.
+        projection_matrix (np.ndarray): 3x4 or 4x4 projection matrix.
+
+    Returns:
+        float: The depth of the center point.
+    """
+    # Step 1: Compute the centroid of the point cloud
+    centroid = np.mean(points_3d, axis=0)  # Shape: (3,)
+
+    # Step 2: Convert to homogeneous coordinates
+    centroid_h = np.append(centroid, 1)  # Shape: (4,)
+
+    # Step 3: Project the centroid using the projection matrix
+    projected = projection_matrix @ centroid_h  # Shape: (3,) or (4,)
+
+    # Step 4: Convert from homogeneous if necessary
+    if projected.shape[0] == 4:
+        depth = projected[2] / projected[3]
+    else:
+        depth = projected[2]  # already normalized or assumed perspective division handled elsewhere
+
+    return depth
+
+def deproject_image_corners(intrinsics, extrinsics, width, height, depth):
+    """
+    Deprojects the image plane corners into 3D space at a given depth.
+
+    Args:
+        intrinsics (np.ndarray): 3x3 camera intrinsics matrix.
+        extrinsics (np.ndarray): 4x4 camera-to-world matrix (R|t).
+        width (int): Image width.
+        height (int): Image height.
+        depth (float): Depth value to deproject onto.
+
+    Returns:
+        np.ndarray: 4x3 array of 3D corner points on the depth plane (in world coordinates).
+    """
+    # Step 1: Define 2D image corners in pixel coordinates
+    image_corners = np.array([
+        [0, 0],               # top-left
+        [width - 1, 0],       # top-right
+        [0, height - 1],      # bottom-left
+        [width - 1, height - 1]  # bottom-right
+    ])  # shape: (4, 2)
+
+    # Step 2: Convert corners to normalized camera coordinates
+    inv_K = np.linalg.inv(intrinsics)
+    corners_homog = np.concatenate([image_corners, np.ones((4, 1))], axis=1).T  # shape: (3, 4)
+    rays = inv_K @ corners_homog  # shape: (3, 4)
+
+    # Step 3: Scale rays to the given depth
+    rays = rays * depth / rays[2, :]  # normalize z to depth
+
+    # Step 4: Convert to world coordinates using extrinsics
+    R = extrinsics[:3, :3]
+    t = extrinsics[:3, 3]
+    points_3d = (R @ rays + t[:, np.newaxis]).T  # shape: (4, 3)
+
+    return points_3d
+
+def project_points_to_image(points_3d, intrinsics, extrinsics):
+    """
+    Projects 3D points onto the image plane using intrinsics and extrinsics.
+
+    Args:
+        points_3d (np.ndarray): 4x3 3D points in world coordinates.
+        intrinsics (np.ndarray): 3x3 camera intrinsics matrix.
+        extrinsics (np.ndarray): 4x4 world-to-camera matrix.
+
+    Returns:
+        np.ndarray: 4x2 projected 2D points.
+    """
+    # Convert to homogeneous coordinates
+    points_3d_h = np.hstack((points_3d, np.ones((points_3d.shape[0], 1))))  # (4, 4)
+    proj_matrix = intrinsics @ extrinsics[:3, :]  # 3x4
+
+    projected = proj_matrix @ points_3d_h.T  # (3, 4)
+    projected /= projected[2, :]  # Normalize
+    return projected[:2, :].T  # (4, 2)
+
+
+def warp_image_to_depth_plane(image, depth_plane_3d, camera_intrinsics, camera_extrinsics):
+    """
+    Warps the input image to align with the 3D depth plane using homography.
+
+    Args:
+        image (np.ndarray): Input image.
+        depth_plane_3d (np.ndarray): 4x3 array of 3D corners of the plane.
+        camera_intrinsics (np.ndarray): 3x3 intrinsics of the input camera.
+        camera_extrinsics (np.ndarray): 4x4 world-to-camera matrix.
+
+    Returns:
+        np.ndarray: Warped image aligned with the depth plane.
+    """
+    h, w = image.shape[:2]
+
+    # Step 1: Image corners (2D)
+    image_corners = np.array([
+        [0, 0],         # top-left
+        [w - 1, 0],     # top-right
+        [0, h - 1],     # bottom-left
+        [w - 1, h - 1]  # bottom-right
+    ], dtype=np.float32)
+
+    # Step 2: Project 3D plane corners to input camera image
+    projected_2d = project_points_to_image(depth_plane_3d, camera_intrinsics, camera_extrinsics).astype(np.float32)
+
+    # Step 3: Compute homography from input image to projected plane
+    H, _ = cv2.findHomography(image_corners, projected_2d)
+
+    # Step 4: Warp image using the homography
+    warped_image = cv2.warpPerspective(image, H, (w, h))
+
+    return warped_image
+
+
+
+
+import cv2
+import numpy as np
+
+def compute_best_depth_image(warped_left_list, warped_right_list):
+    """
+    Computes the final interpolated image by minimizing pixel-wise error across depth layers.
+
+    Args:
+        warped_left_list (list of np.ndarray): List of warped left images at each depth.
+        warped_right_list (list of np.ndarray): List of warped right images at each depth.
+
+    Returns:
+        np.ndarray: Final image composed of best-pixel matches.
+    """
+    num_layers = len(warped_left_list)
+    h, w, c = warped_left_list[0].shape
+
+    min_error = np.full((h, w), np.inf)
+    best_image = np.zeros((h, w, c), dtype=np.uint8)
+
+    for i in range(num_layers):
+        left = warped_left_list[i]
+        right = warped_right_list[i]
+
+        # Convert to grayscale
+        gray_left = cv2.cvtColor(left, cv2.COLOR_BGR2GRAY)
+        gray_right = cv2.cvtColor(right, cv2.COLOR_BGR2GRAY)
+
+        # Apply slight blur to reduce noise/artifacts
+        gray_left = cv2.GaussianBlur(gray_left, (3, 3), 0)
+        gray_right = cv2.GaussianBlur(gray_right, (3, 3), 0)
+
+        # Absolute pixel-wise difference
+        error = cv2.absdiff(gray_left, gray_right).astype(np.float32)
+
+        # Update mask where error improves
+        mask = error < min_error
+        min_error[mask] = error[mask]
+
+        # Average left and right color images where mask is valid
+        blended = ((left.astype(np.uint16) + right.astype(np.uint16)) // 2).astype(np.uint8)
+        best_image[mask] = blended[mask]
+
+    return best_image
+
+def apply_transform(points_3d, transform):
+    num_pts = points_3d.shape[0]
+    homog = np.hstack([points_3d, np.ones((num_pts, 1))])
+    transformed = (transform @ homog.T).T
+    return transformed[:, :3]
+
+
+def make_warped_lists(K, R, T, img_left, img_right, width, height, depth_center):
+    warped_left_list = []
+    warped_right_list = []
+
+    # Left camera at origin (identity transform)
+    extr_left = np.eye(4)
+    extr_left[:3, :3] = np.eye(3)  # No rotation
+    extr_left[:3, 3] = np.zeros(3)  # At origin
+
+    extr_right = np.eye(4)
+    extr_right[:3, :3] = R
+    extr_right[:3, 3] = T.squeeze()
+
+    midpoint_translation = (extr_left[:3, 3] + extr_right[:3, 3]) / 2
+
+    extr_virtual = np.eye(4)
+    extr_virtual[:3, :3] = np.eye(3)  # Keep same orientation (optional)
+    extr_virtual[:3, 3] = midpoint_translation
+
+    num_layers = 50
+    depth_range = 0.1  
+    depths = np.linspace(depth_center * (1 - depth_range),
+                         depth_center * (1 + depth_range),
+                         num_layers)
     
-#     Parameters:
-#     - R: Rotation matrix of the second camera.
-#     - T: Translation vector of the second camera.
-#     - K: Camera intrinsic matrix.
-#     - img1: Left image (grayscale).
-#     - img2: Right image (grayscale).
-#     - disparity_range: The number of disparity levels to sweep over.
-    
-#     Returns:
-#     - depth_map: Computed depth map using plane sweeping.
-#     """
+    black_count_left = 0
+    black_count_right = 0
+    for d in depths:
+        # (1) Deproject corners in virtual camera frame
+        depth_plane_3d_virtual = deproject_image_corners(K, extr_virtual, width, height, d)
 
-#     # Image dimensions
-#     h, w = img1.shape[:2]
+        # (2) Compute relative transforms
+        T_virtual_to_left = extr_left @ np.linalg.inv(extr_virtual)
+        T_virtual_to_right = extr_right @ np.linalg.inv(extr_virtual)
 
-#     # Initialize depth and cost volume
-#     depth_map = np.zeros((h, w), dtype=np.float32)
-#     cost_volume = np.full((h, w, disparity_range), np.inf)  # Store cost for each depth hypothesis
+        # (3) Transform depth plane into left and right camera coordinates
+        depth_plane_3d_left = apply_transform(depth_plane_3d_virtual, T_virtual_to_left)
+        depth_plane_3d_right = apply_transform(depth_plane_3d_virtual, T_virtual_to_right)
 
-#     # Define depth values (inverse depth values for proper disparity)
-#     depth_values = np.linspace(0.1, 2.0, disparity_range)  # Adjust based on scene scale
+        # (4) Warp images to the virtual depth plane
+        warped_left = warp_image_to_depth_plane(img_left, depth_plane_3d_left, K, extr_left)
+        warped_right = warp_image_to_depth_plane(img_right, depth_plane_3d_right, K, extr_right)
 
-#     # Convert the extrinsic parameters into a projection matrix
-#     P1 = K @ np.hstack((np.eye(3), np.zeros((3, 1))))  # First camera (identity pose)
-#     P2 = K @ np.hstack((R, T))  # Second camera (transformed pose)
 
-#     for d_idx, depth in enumerate(depth_values):
-#         # Create a disparity map for the current depth
-#         disparity = 1.0 / depth  # Simulating inverse depth
+        # Check if the warped images are empty or have unusual pixel values
+        if np.all(warped_left == 0):
+            black_count_left += 1
+            print(f"Warning: warped_left is all black at depth {d}")
+        if np.all(warped_right == 0):
+            black_count_right += 1
+            print(f"Warning: warped_right is all black at depth {d}")
 
-#         # Compute the transformation for the corresponding disparity
-#         pts1_homogeneous = np.vstack((np.indices((h, w)).reshape(2, -1), np.ones((1, h * w))))
-#         pts1_3D = np.linalg.inv(K) @ pts1_homogeneous * depth  # Convert pixels to 3D
+        # # Show the warped images for debugging
+        # cv2.imshow("Warped Left", warped_left)
+        # cv2.waitKey(0)
+        # cv2.destroyAllWindows()
 
-#         # Project points onto second image
-#         pts2_3D = R @ pts1_3D + T
-#         pts2_homogeneous = K @ pts2_3D
-#         pts2 = pts2_homogeneous[:2] / pts2_homogeneous[2]  # Normalize homogeneous coordinates
+        # cv2.imshow("Warped Right", warped_right)
+        # cv2.waitKey(0)
+        # cv2.destroyAllWindows()
 
-#         # Reshape points back into image format
-#         pts1_reshaped = pts1_homogeneous[:2].reshape(2, h, w).astype(np.float32)
-#         pts2_reshaped = pts2.reshape(2, h, w).astype(np.float32)
+        # Add to lists
+        warped_left_list.append(warped_left)
+        warped_right_list.append(warped_right)
 
-#         # Compute image similarity using SSD (Sum of Squared Differences)
-#         warped_img2 = cv2.remap(img2, pts2_reshaped[0], pts2_reshaped[1], cv2.INTER_LINEAR)
-#         ssd = (img1 - warped_img2) ** 2  # SSD cost metric
-
-#         # Store the cost at the current depth level
-#         cost_volume[:, :, d_idx] = ssd
-
-#     # Find the best depth by selecting the lowest cost per pixel
-#     best_depth_idx = np.argmin(cost_volume, axis=2)
-#     depth_map = depth_values[best_depth_idx]  # Convert index to actual depth values
-
-#     # Normalize for visualization
-#     depth_map = cv2.normalize(depth_map, None, 0, 255, cv2.NORM_MINMAX).astype(np.uint8)
-
-#     return depth_map
+    print(f"Number of black warped left images: {black_count_left}")
+    print(f"Number of black warped right images: {black_count_right}")
+    return warped_left_list, warped_right_list
 
 import numpy as np
 import cv2
 
-def compute_scene_depth_bounds(point_cloud):
+def render_virtual_view(warped_left_list, warped_right_list):
     """
-    Computes the depth range based on the center of the point cloud.
-    This helps in defining the depth planes.
-    
-    Args:
-        point_cloud (numpy array): Nx3 array representing the point cloud.
-
-    Returns:
-        depth_min (float): Minimum depth.
-        depth_max (float): Maximum depth.
-    """
-    center = np.mean(point_cloud, axis=0)  # Compute center of the scene
-    depths = point_cloud[:, 2]  # Extract Z (depth) values
-
-    depth_min = np.min(depths)
-    depth_max = np.max(depths)
-
-    return depth_min, depth_max, center[2]  # Return depth range and center depth
-
-def generate_depth_planes(depth_min, depth_max, center_depth, num_planes=50, offset_factor=0.5):
-    """
-    Generate depth planes based on center of the point cloud.
+    Renders the final virtual camera image from warped left and right image stacks.
 
     Args:
-        depth_min (float): Minimum depth value.
-        depth_max (float): Maximum depth value.
-        center_depth (float): Depth value at the center of the scene.
-        num_planes (int): Number of depth planes to sample.
-        offset_factor (float): Factor to control how far the planes extend from the center.
+        warped_left_list (list of np.ndarray): List of left images warped to virtual camera.
+        warped_right_list (list of np.ndarray): List of right images warped to virtual camera.
 
     Returns:
-        depths (numpy array): List of depth values for planes.
+        np.ndarray: Final rendered image from virtual viewpoint.
     """
-    # Calculate an offset around the center depth
-    depth_offset = (depth_max - depth_min) * offset_factor
-    
-    # Generate depth planes around the center
-    depths = np.linspace(center_depth - depth_offset, center_depth + depth_offset, num_planes)
-    
-    return depths
+    num_layers = len(warped_left_list)
+    h, w, c = warped_left_list[0].shape
 
+    # Initialize output
+    min_error = np.full((h, w), np.inf)
+    best_image = np.zeros((h, w, c), dtype=np.uint8)
 
-def back_project_to_3D(image_corners, camera_matrix, depth):
-    """
-    Back-projects 2D image points to a 3D plane at a given depth.
+    for i in range(num_layers):
+        left = warped_left_list[i]
+        right = warped_right_list[i]
 
-    Args:
-        image_corners (numpy array): 2D pixel coordinates of the image corners.
-        camera_matrix (numpy array): Intrinsic camera matrix.
-        depth (float): Depth plane at which to back-project.
+        # Compute pixel-wise error (grayscale absdiff)
+        gray_left = cv2.cvtColor(left, cv2.COLOR_BGR2GRAY)
+        gray_right = cv2.cvtColor(right, cv2.COLOR_BGR2GRAY)
+        error = cv2.absdiff(gray_left, gray_right).astype(np.float32)
 
-    Returns:
-        numpy array: 3D coordinates of the projected points.
-    """
-    K_inv = np.linalg.inv(camera_matrix)  # Invert camera matrix
-    homog_corners = np.hstack((image_corners, np.ones((4, 1))))  # Convert to homogeneous
-    world_points = (K_inv @ homog_corners.T).T  # Convert to normalized camera space
-    world_points *= depth  # Scale by depth
+        # Mask where this layer is better
+        better_mask = error < min_error
+        min_error[better_mask] = error[better_mask]
 
-    return world_points
+        # Average color (or just pick left/right – here we average)
+        blended = ((left.astype(np.uint16) + right.astype(np.uint16)) // 2).astype(np.uint8)
 
-def compute_homography(K, depth):
-    """
-    Computes the homography matrix for a given camera intrinsic matrix K and depth plane.
-    """
+        # Update best image where this depth is better
+        best_image[better_mask] = blended[better_mask]
 
-    # Define 4 canonical 2D points (image plane corners in homogeneous coordinates)
-    h, w = 480, 640  # Example image dimensions, replace with actual image size
-    src_points = np.array([
-        [0, 0], [w, 0], [w, h], [0, h]  # Image corners
-    ], dtype=np.float32)
-
-    # Convert these 2D points to homogeneous coordinates
-    src_points_h = np.hstack([src_points, np.ones((4, 1))])
-
-    # Convert image plane points into 3D by back-projecting with depth
-    src_points_3D = np.linalg.inv(K) @ src_points_h.T  # Back-project to 3D
-    src_points_3D *= depth  # Scale by the depth to place on depth plane
-
-    # Project these 3D points onto the new virtual camera plane
-    dst_points = K @ src_points_3D  # Reproject into 2D
-    dst_points = (dst_points[:2] / dst_points[2]).T  # Convert from homogeneous to 2D
-
-    # Ensure we have at least 4 valid points
-    if len(src_points) < 4 or len(dst_points) < 4:
-        raise ValueError("Not enough points for homography computation!")
-
-    print("Source points:\n", src_points)
-    print("Destination points:\n", dst_points)
-    # Compute homography
-    H, status = cv2.findHomography(src_points, dst_points)
-    print(f"Depth: {depth}, Homography H: {H}")
-
-    return H
-
-def warp_image(image, H, output_size):
-    """
-    Warp an image using the given homography matrix.
-
-    Args:
-        image (numpy array): Input image.
-        H (numpy array): Homography matrix.
-        output_size (tuple): Output image dimensions (width, height).
-
-    Returns:
-        numpy array: Warped image.
-    """
-    return cv2.warpPerspective(image, H, output_size)
-
-def compute_reprojection_error(image1, image2):
-    """
-    Compute pixel-wise absolute difference between two images.
-
-    Args:
-        image1 (numpy array): First image.
-        image2 (numpy array): Second image.
-
-    Returns:
-        numpy array: Absolute difference image.
-    """
-    return cv2.absdiff(image1, image2)
-
-def sweep_depth_planes(img1, img2, K, point_cloud, num_planes=10):
-    h, w, _ = img1.shape  # Ensure input images are color (HxWx3)
-
-    # Compute the depth bounds and center
-    depth_min, depth_max, center_depth = compute_scene_depth_bounds(point_cloud)
-    
-    # Generate depth planes based on the center of the point cloud
-    depth_planes = generate_depth_planes(depth_min, depth_max, center_depth, num_planes)
-    
-    best_errors = np.full((h, w), np.inf)  # Track minimum error per pixel
-    best_colors = np.zeros((h, w, 3), dtype=np.uint8)  # Store best color reconstruction
-
-    for depth in depth_planes:
-        # Step 1: Compute homography and warp img2 to img1 viewpoint at this depth
-        H = compute_homography(K, depth)  # Implement based on plane-sweeping math
-        warped_img2 = cv2.warpPerspective(img2, H, (w, h))  # Align to reference image
-        warped_img2_resized = cv2.resize(warped_img2, (960, 540)) 
-        cv2.imshow("Warped Image", warped_img2_resized)  # Display warped image for debugging
-        cv2.waitKey(0)
-        cv2.destroyAllWindows()
-        
-        # Step 2: Compute pixel-wise difference (error)
-        error = cv2.absdiff(img1, warped_img2)  # Difference between left and warped right
-        total_error = np.sum(error, axis=2)  # Sum over RGB channels
-        
-        # Step 3: Update best colors where error is minimal
-        mask = total_error < best_errors  # Pixels where this depth gives lower error
-        best_errors[mask] = total_error[mask]  # Update minimal error map
-        best_colors[mask] = warped_img2[mask]  # Assign the best-matching color pixels
-
-    return best_colors  # Final reconstructed virtual viewpoint
+    return best_image
 
 
 if __name__ == "__main__":
@@ -615,10 +681,38 @@ if __name__ == "__main__":
     # switch_camera_view_static(R, T, K, pts1, pts2, points_3D_opencv, colors, img1Color.shape)
     # switch_camera_view_dynamic(R, T, K, pts1, pts2, points_3D_opencv, colors, img1Color.shape)
 
-    depth_map = sweep_depth_planes(img1ColorRGB, img2ColorRGB, K, points_3D_opencv, num_planes=10)
-    depth_map_colored = cv2.applyColorMap(depth_map.astype(np.uint8), cv2.COLORMAP_JET)
-    depth_map_resized = cv2.resize(depth_map, (960, 540))
-    plt.imshow(depth_map_resized)
-    plt.colorbar()
-    plt.show()
-    visualize_depth_map(depth_map)
+    # Compute the projection matrix
+    projection_matrix = np.hstack((R, T))
+    projection_matrix = K @ projection_matrix  # Shape: (3, 4)
+
+    # Compute the depth of the center point
+    center_depth = compute_scene_center_depth(points_3D_opencv, projection_matrix)
+    print(f"Depth of the center point: {center_depth:.2f}")
+
+    # Deproject the image corners
+    deprojected_corners = deproject_image_corners(K, np.hstack((R, T)), img1Color.shape[1], img1Color.shape[0], center_depth)
+    print("Deprojected corners (in world coordinates):")
+    print(deprojected_corners)
+
+    # warp the image to the depth plane
+    extr_left = np.eye(4)  # left camera at origin
+    extr_right = np.eye(4)
+    extr_right[:3, :3] = R
+    extr_right[:3, 3] = T.squeeze()
+    
+    warped_left_list, warped_right_list = make_warped_lists(K, R, T, img1Color, img2Color, img1Color.shape[1], img1Color.shape[0], center_depth)
+
+    final_output = compute_best_depth_image(warped_left_list, warped_right_list)
+    cv2.imshow("Final Interpolated Image", final_output)
+    cv2.waitKey(0)
+
+    final_output = render_virtual_view(warped_left_list, warped_right_list)
+    cv2.imshow("Final Rendered Image", final_output)
+    cv2.waitKey(0)
+
+    # save the image
+    cv2.imwrite("../Result/final_output_plane_sweep1.png", final_output)
+    cv2.destroyAllWindows()
+
+
+

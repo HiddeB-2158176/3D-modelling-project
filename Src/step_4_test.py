@@ -345,7 +345,7 @@ if __name__ == "__main__":
     print("Camera 2 position:", P2[ :3, 3])
     print("Virtual camera position:", P_virtual[:3, 3])
 
-    images = [img1Color, img2Color]
+    images = [img1ColorRGB, img2ColorRGB]
 
     
     # Initialize plane sweeping
