@@ -570,20 +570,20 @@ def make_warped_lists(K, R, T, img_left, img_right, width, height, depth_center)
 
         # Check if the warped images are empty or have unusual pixel values
         if np.all(warped_left == 0):
-            black_count_left += 1
+            black_count_left += 1 
             print(f"Warning: warped_left is all black at depth {d}")
         if np.all(warped_right == 0):
             black_count_right += 1
             print(f"Warning: warped_right is all black at depth {d}")
 
-        # # Show the warped images for debugging
-        # cv2.imshow("Warped Left", warped_left)
-        # cv2.waitKey(0)
-        # cv2.destroyAllWindows()
+        # Show the warped images for debugging
+        cv2.imshow("Warped Left", warped_left)
+        cv2.waitKey(0)
+        cv2.destroyAllWindows()
 
-        # cv2.imshow("Warped Right", warped_right)
-        # cv2.waitKey(0)
-        # cv2.destroyAllWindows()
+        cv2.imshow("Warped Right", warped_right)
+        cv2.waitKey(0)
+        cv2.destroyAllWindows()
 
         # Add to lists
         warped_left_list.append(warped_left)
