@@ -33,6 +33,8 @@ def compute_essential_matrix(keypoints1, keypoints2, matches, K):
 def create_camera_pyramid(size=0.1):
     """
     Create a pyramid mesh representing a camera.
+
+    :param size: Size of the pyramid
     """
     # Vertices for a pyramid (base + top)
     vertices = np.array([
@@ -61,6 +63,8 @@ def create_camera_pyramid(size=0.1):
 def close_visualizer(vis):
     """
     Close the Open3D visualizer.
+
+    :param vis: Open3D visualizer object
     """
     vis.close()  # This will close the Open3D window
     return False  # Returning False ensures it stops updating
@@ -68,6 +72,9 @@ def close_visualizer(vis):
 def visualize_cameras_axises(R, T):
     """
     Visualize the cameras with axises.
+
+    :param R: Rotation matrix
+    :param T: Translation vector
     """
     vis = o3d.visualization.VisualizerWithKeyCallback()
     vis.create_window()
@@ -94,6 +101,9 @@ def visualize_cameras_axises(R, T):
 def visualize_cameras_pyramids(R, T):
     """
     Visualize the cameras with pyramids.
+
+    :param R: Rotation matrix
+    :param T: Translation vector
     """
     vis = o3d.visualization.VisualizerWithKeyCallback()
     vis.create_window()
@@ -167,13 +177,13 @@ def triangulate_manual(pts1, pts2, K, R, T):
     for (x1, y1), (x2, y2) in zip(pts1, pts2):
         # The formula Ax=0 is used to solve for 3D points (see extra info on triangulation)
         A = np.array([
-            x1 * P1[2, :] - P1[0, :],  # x1 * P1_row3 - P1_row1
-            y1 * P1[2, :] - P1[1, :],  # y1 * P1_row3 - P1_row2
-            x2 * P2[2, :] - P2[0, :],  # x2 * P2_row3 - P2_row1
-            y2 * P2[2, :] - P2[1, :]   # y2 * P2_row3 - P2_row2
+            x1 * P1[2, :] - P1[0, :],
+            y1 * P1[2, :] - P1[1, :],
+            x2 * P2[2, :] - P2[0, :], 
+            y2 * P2[2, :] - P2[1, :]  
         ])
 
-        # # Solve for the 3D point using SVD (last column of Vt gives x)
+        # Solve for the 3D point using SVD (last column of Vt gives x)
         _, _, Vt = np.linalg.svd(A)
         X = Vt[-1, :]
 
@@ -186,6 +196,9 @@ def triangulate_manual(pts1, pts2, K, R, T):
 def visualize_3D_points(points_3D, colors):
     """
     Visualize the 3D pointcloud with color.
+
+    :param points_3D: Nx3 array of 3D points
+    :param colors: Nx3 array of RGB colors
     """
     pcd = o3d.geometry.PointCloud()
     pcd.points = o3d.utility.Vector3dVector(points_3D)
@@ -206,6 +219,16 @@ def visualize_3D_points(points_3D, colors):
     vis.destroy_window()
 
 def get_colors(img1, img2, pts1, pts2):
+    """
+    Get the colors of the points in the images.
+
+    :param img1: First image (color)
+    :param img2: Second image (color)
+    :param pts1: 2D points from camera 1 (Nx2 array)
+    :param pts2: 2D points from camera 2 (Nx2 array)
+    :return: Nx3 array of colors
+    """
+
     colors = []
     inifcount = 0
     inoutcount = 0
@@ -229,6 +252,52 @@ def get_colors(img1, img2, pts1, pts2):
 
     colors = np.array(colors, dtype=np.float32) / 255.0  # Normalize to range [0,1]
     return colors
+
+# Extra mesh
+def create_mesh_from_pointcloud(pcd, method='poisson', depth=8, radii=[0.005, 0.01, 0.02]):
+    """
+    Create a mesh from a point cloud using Poisson or Ball Pivoting.
+
+    :param pcd: Open3D point cloud object
+    :param method: 'poisson' or 'ball_pivoting'
+    :param depth: Depth for Poisson reconstruction
+    :param radii: Radii list for Ball Pivoting
+    :return: Open3D mesh object
+    """
+    print(f"Estimating normals for mesh reconstruction...")
+    pcd.estimate_normals(search_param=o3d.geometry.KDTreeSearchParamHybrid(radius=0.05, max_nn=30))
+    pcd.orient_normals_consistent_tangent_plane(100)
+
+    if method == 'poisson':
+        print(f"Running Poisson reconstruction with depth={depth}...")
+        mesh, densities = o3d.geometry.TriangleMesh.create_from_point_cloud_poisson(pcd, depth=depth)
+        # Optionally crop mesh based on density threshold
+        vertices_to_remove = densities < np.quantile(densities, 0.01)
+        mesh.remove_vertices_by_mask(vertices_to_remove)
+        return mesh
+    elif method == 'ball_pivoting':
+        print(f"Running Ball Pivoting reconstruction...")
+        pcd = pcd.voxel_down_sample(voxel_size=0.001)
+        mesh = o3d.geometry.TriangleMesh.create_from_point_cloud_ball_pivoting(
+            pcd, o3d.utility.DoubleVector(radii)
+        )
+        return mesh
+    else:
+        raise ValueError("Method must be 'poisson' or 'ball_pivoting'")
+    
+def visualize_mesh_with_callback(mesh):
+    """
+    Visualize the mesh and allow closing with the 'C' key.
+
+    :param mesh: Open3D mesh object
+    """
+    vis = o3d.visualization.VisualizerWithKeyCallback()
+    vis.create_window()
+    vis.add_geometry(mesh)
+    vis.register_key_callback(ord("C"), close_visualizer)
+    vis.run()
+    vis.destroy_window()
+
 
 if __name__ == "__main__":
     images_view0 = glob.glob('../Data/GrayCodes/view0/*.jpg')
@@ -282,4 +351,16 @@ if __name__ == "__main__":
     # 3D punten visualiseren
     visualize_3D_points(points_3D_manual, colors)
 
+    # Extra mesh
+    # Create Open3D point cloud
+    pcd = o3d.geometry.PointCloud()
+    pcd.points = o3d.utility.Vector3dVector(points_3D_manual)
+    pcd.colors = o3d.utility.Vector3dVector(colors)
+
+    # Generate mesh from point cloud
+    mesh = create_mesh_from_pointcloud(pcd, method='ball_pivoting', depth=9)
+
+    # Visualize the mesh
+    print("Visualizing mesh...")
+    visualize_mesh_with_callback(mesh)
 
