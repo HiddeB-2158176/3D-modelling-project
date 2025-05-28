@@ -5,9 +5,11 @@ import numpy as np
 import GrayCodeEncoder
 import random
 import open3d as o3d
+import sys
 
 #import step_2.py file from same folder
 from step_2 import decode_gray_pattern, find_correspondences
+from step_2 import get_image_paths, read_images, decode_gray_pattern_n_cameras, find_correspondences_n_cameras
 
 def compute_essential_matrix(keypoints1, keypoints2, matches, K):
     """
@@ -69,7 +71,7 @@ def close_visualizer(vis):
     vis.close()  # This will close the Open3D window
     return False  # Returning False ensures it stops updating
 
-def visualize_cameras_axises(R, T):
+def visualize_cameras_axises(positions):
     """
     Visualize the cameras with axises.
 
@@ -83,22 +85,23 @@ def visualize_cameras_axises(R, T):
     camera1 = o3d.geometry.TriangleMesh.create_coordinate_frame(size=0.1)
     vis.add_geometry(camera1)
 
-    # Second camera with the calculated rotation and translation
-    camera2 = o3d.geometry.TriangleMesh.create_coordinate_frame(size=0.1)
-    transformation = np.eye(4)
-    transformation[:3, :3] = R  # Rotatie
-    transformation[:3, 3] = T.T  # Translatie
-    camera2.transform(transformation)
+    for pos in positions:
+        # Second camera with the calculated rotation and translation
+        camera = o3d.geometry.TriangleMesh.create_coordinate_frame(size=0.1)
+        transformation = np.eye(4)
+        transformation[:3, :3] = pos[0]  # Rotatie
+        transformation[:3, 3] = pos[1].T  # Translatie
+        camera.transform(transformation)
 
-    # Add the second camera to the visualizer
-    vis.add_geometry(camera2)
+        # Add the second camera to the visualizer
+        vis.add_geometry(camera)
 
     vis.register_key_callback(ord("C"), close_visualizer)
 
     vis.run()
     vis.destroy_window()
 
-def visualize_cameras_pyramids(R, T):
+def visualize_cameras_pyramids(positions):
     """
     Visualize the cameras with pyramids.
 
@@ -112,17 +115,18 @@ def visualize_cameras_pyramids(R, T):
     camera1 = create_camera_pyramid()
     vis.add_geometry(camera1)
 
-    # Second camera with the calculated rotation and translation
-    camera2 = create_camera_pyramid()
+    for pos in positions:
+        # Second camera with the calculated rotation and translation
+        camera = create_camera_pyramid()
 
-    # Combine the rotation and translation into a single transformation matrix
-    transform = np.eye(4)
-    transform[:3, :3] = R
-    transform[:3, 3] = T.T
+        # Combine the rotation and translation into a single transformation matrix
+        transform = np.eye(4)
+        transform[:3, :3] = R
+        transform[:3, 3] = T.T
 
-    # Apply the transformation to the pyramid for the second camera
-    camera2.transform(transform)
-    vis.add_geometry(camera2)
+        # Apply the transformation to the pyramid for the second camera
+        camera.transform(transform)
+        vis.add_geometry(camera)
 
     vis.register_key_callback(ord("C"), close_visualizer)
 
@@ -300,62 +304,88 @@ def visualize_mesh_with_callback(mesh):
 
 
 if __name__ == "__main__":
-    images_view0 = glob.glob('../Data/GrayCodes/view0/*.jpg')
-    images_view1 = glob.glob('../Data/GrayCodes/view1/*.jpg')
 
-    images0 = []
-    images1 = []
-    for i in range(len(images_view0)):
-        resized0 = cv2.resize(cv2.imread(images_view0[i], cv2.IMREAD_GRAYSCALE), (1920, 1080))
-        resized1 = cv2.resize(cv2.imread(images_view1[i], cv2.IMREAD_GRAYSCALE), (1920, 1080))
-        images0.append(resized0)
-        images1.append(resized1)
+    triangulate_method = sys.argv[1].lower()
 
-    result0 = decode_gray_pattern(images0)
-    result1 = decode_gray_pattern(images1)
+    number_of_cameras = 2
 
-    img1 = images0[0]
-    img2 = images1[0]
+    image_paths = get_image_paths(number_of_cameras)
+    loaded_images = read_images(image_paths)
+    print(f"Number of cameras: {len(loaded_images)}")
+    print(f"Number of images per camera: {len(loaded_images[0])}")
 
-    img1Color = cv2.resize(cv2.imread(images_view0[0], cv2.IMREAD_COLOR), (1920, 1080))
-    img2Color = cv2.resize(cv2.imread(images_view1[0], cv2.IMREAD_COLOR), (1920, 1080))
+    results = decode_gray_pattern_n_cameras(loaded_images)
 
-    keypoints1, keypoints2, matches = find_correspondences(result0, result1)
+    color_images = []
+    for i in range(len(results)):
+        color_images.append(cv2.resize(cv2.imread(image_paths[i][0], cv2.IMREAD_COLOR), (1920, 1080)))
 
-    # draw_matched_correspondences(img1, img2, keypoints1, keypoints2, matches)
+    correspondences = find_correspondences_n_cameras(results)
 
     K = np.array([[9.51663140e+03, 0.00000000e+00, 2.81762458e+03],[0.00000000e+00, 8.86527952e+03, 1.14812762e+03],[0.00000000e+00, 0.00000000e+00, 1.00000000e+00]])
 
-    E, mask, pts1, pts2 = compute_essential_matrix(keypoints1, keypoints2, matches, K)
+    essential_matrices = []
+    masks  = []
+    pts1_list = []
+    pts2_list = []
+    for c in correspondences:
+        keypoints1, keypoints2, matches = c
+        E, mask, pts1, pts2 = compute_essential_matrix(keypoints1, keypoints2, matches, K)
+        essential_matrices.append(E)
+        masks.append(mask)
+        pts1_list.append(pts1)
+        pts2_list.append(pts2)
 
     # R = rotatie vector
     # T = translatie vector
-    _, R, T, mask = cv2.recoverPose(E, pts1, pts2, K)
+    recovered_poses = []
+    print('Recovering poses from essential matrices')
+    for i, e in enumerate(essential_matrices):
+        _, R, T, mask = cv2.recoverPose(e, pts1_list[i], pts2_list[i], K, mask=masks[i])
+        recovered_poses.append((R, T))
 
-    visualize_cameras_axises(R, T)
-    visualize_cameras_pyramids(R, T)
+    visualize_cameras_axises(recovered_poses)
+    visualize_cameras_pyramids(recovered_poses)
 
-    points_3D_opencv = triangulate_opencv(pts1, pts2, K, R, T)
-    points_3D_manual = triangulate_manual(pts1, pts2, K, R, T)
+    print("Triagulating points")
+    points_3d = []
+    for i in range(len(pts1_list)):
+        pts3d = []
+        if triangulate_method == "opencv":
+            pts3d = triangulate_opencv(pts1_list[i], pts2_list[i], K, recovered_poses[i][0], recovered_poses[i][1])
+        elif triangulate_method == "manual":
+            pts3d = triangulate_manual(pts1_list[i], pts2_list[i], K, recovered_poses[i][0], recovered_poses[i][1])
+        points_3d.append(pts3d)
 
-    # cv2.imshow('img1', img1Color)
-    # cv2.waitKey(0)
-    # cv2.destroyAllWindows()
+    
+    print("Getting colors")
+    colors = []
+    for i in range(len(results) - 1):
+        for j in range(i + 1, len(results)):
+            colors.append(get_colors(color_images[i], color_images[j], pts1_list[i], pts2_list[i]))
 
-    # cv2.imshow('img2', img2Color)
-    # cv2.waitKey(0)
-    # cv2.destroyAllWindows()
+    pts     = np.vstack(points_3d)   # (M,3)
+    colors  = np.vstack(colors)      # (M,3), corresponderend met pts
 
-    colors = get_colors(img1Color, img2Color, pts1, pts2)
+    # 1) ronde en unique zoals eerder
+    pts_rnd    = np.round(pts, 3)
+    structured = np.ascontiguousarray(pts_rnd).view(
+        np.dtype((np.void, pts_rnd.dtype.itemsize * 3))
+    )
+    _, idx = np.unique(structured, return_index=True)
+
+    # 2) pas idx toe op beide arrays
+    pts_unique   = pts[idx]
+    colors_unique = colors[idx]
 
     # 3D punten visualiseren
-    visualize_3D_points(points_3D_manual, colors)
+    visualize_3D_points(pts_unique, colors_unique)
 
     # Extra mesh
     # Create Open3D point cloud
     pcd = o3d.geometry.PointCloud()
-    pcd.points = o3d.utility.Vector3dVector(points_3D_manual)
-    pcd.colors = o3d.utility.Vector3dVector(colors)
+    pcd.points = o3d.utility.Vector3dVector(pts_unique)
+    pcd.colors = o3d.utility.Vector3dVector(colors_unique)
 
     # Generate mesh from point cloud
     mesh = create_mesh_from_pointcloud(pcd, method='ball_pivoting', depth=9)
