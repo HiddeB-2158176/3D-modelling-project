@@ -134,7 +134,7 @@ objp[:,:2] = np.mgrid[0:7,0:9].T.reshape(-1,2)
 axis = np.float32([[3,0,0], [0,3,0], [0,0,-3]]).reshape(-1,3)
 
 scale = 0.5
-images = glob.glob('/Result/ownChessImages/*.png')
+images = glob.glob('../Data/GrayCodes/chess/*.jpg')
 
 # Calibration camera
 ret, K, dist, rvecs, tvecs, objpoints, imgpoints = find_chessboard_corners(images, scale)

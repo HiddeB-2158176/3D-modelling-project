@@ -11,14 +11,14 @@ if len(monitors) < 2:
 projector_monitor = monitors[1]  # Assuming the projector is the second monitor
 
 # Load Graycode patterns
-pattern_files = sorted(glob.glob('../patterns/*.jpg'))
+pattern_files = sorted(glob.glob('../Result/gce_patterns/*.jpg'))
 patterns = [cv2.resize(cv2.imread(p, cv2.IMREAD_GRAYSCALE), (1280, 800)) for p in pattern_files]
 
 # add white image and black image to the patterns
 patterns.append(np.ones((800, 1280), dtype=np.uint8) * 255)  # White image
 patterns.append(np.zeros((800, 1280), dtype=np.uint8))  # Black image
 
-vc = cv2.VideoCapture(0)  # Adjust index as needed
+vc = cv2.VideoCapture(0) 
 vc.set(cv2.CAP_PROP_FPS, 30.0)
 vc.set(cv2.CAP_PROP_FRAME_WIDTH, 1280)
 vc.set(cv2.CAP_PROP_FRAME_HEIGHT, 800)
@@ -54,9 +54,9 @@ for i, pattern in enumerate(patterns):
 #     if ret:
 #         save_path = f"../Result/ownChessImages/chess_capture_{i:02}.png"
 #         cv2.imwrite(save_path, frame)
-#         print(f"✅ Saved: {save_path}")
+#         print(f"Saved: {save_path}")
 #     else:
-#         print("⚠️ Capture failed! Check camera connection or settings.")
+#         print("Capture failed! Check camera connection or settings.")
 
 cv2.destroyAllWindows()
 vc.release()

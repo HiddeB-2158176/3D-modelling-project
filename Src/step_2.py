@@ -128,7 +128,7 @@ def generate_gray_code_patterns():
     """
     gce = GrayCodeEncoder.GrayCodeEncoder(1080, 1920, 10)
     for i in range(0, 40):
-        cv2.imwrite(f"Result/gce_patterns/{i:02d}.jpg", gce.get_encoding_pattern(i))
+        cv2.imwrite(f"../Result/gce_patterns/{i:02d}.jpg", gce.get_encoding_pattern(i))
 
 
 def get_image_paths(number_of_cameras):

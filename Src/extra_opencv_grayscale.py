@@ -4,11 +4,18 @@ import glob
 
 
 def to_grayscale(img):
+    """
+    Convert an image to grayscale using the formula:
+    Y = 0.299 * R + 0.587 * G + 0.114 * B
+    
+    :param img: Input image in BGR format.
+    :return: Grayscale image.
+    """
+
     return 0.299 * img[:, :, 2] + 0.587 * img[:, :, 1] + 0.114 * img[:, :, 0]
 
 
 if __name__ == "__main__":
-    # Test the function
     images_view0 = glob.glob('../Data/GrayCodes/view0/*.jpg')
     images_view1 = glob.glob('../Data/GrayCodes/view1/*.jpg')
 
@@ -20,7 +27,6 @@ if __name__ == "__main__":
         images0.append(resized0)
         images1.append(resized1)
     
-    # Load color images for final visualization
     img1Color = cv2.resize(cv2.imread(images_view0[0], cv2.IMREAD_COLOR), (1920, 1080))
     img2Color = cv2.resize(cv2.imread(images_view1[0], cv2.IMREAD_COLOR), (1920, 1080))
 

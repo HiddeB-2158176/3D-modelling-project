@@ -3,6 +3,13 @@ import numpy as np
 import glob
 
 def sobel(img):
+    """
+    Apply Sobel operator to the input image to compute the gradient magnitude.
+
+    :param img: Input image in grayscale.
+    :return: Gradient magnitude image.
+    """
+    
     # Sobel operator in x direction
     sobel_x = np.array([[-1, 0, 1],
                         [-2, 0, 2],

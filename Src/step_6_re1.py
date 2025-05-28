@@ -4,10 +4,17 @@ import glob
 import os
 
 def find_chessboard_corners(images, scale):
+    """
+    Find the chessboard corners in the images and calibrate the camera.
+
+    :param images: List of image paths.
+    :param scale: Scale factor for resizing the images.
+    :return: ret, K, dist, rvecs, tvecs, objpoints, imgpoints
+    """
+
     objpoints = []
     imgpoints = []
 
-    # Create object points for a 14x9 pattern (14 across, 9 down)
     objp = np.zeros((13*8, 3), np.float32)
     objp[:, :2] = np.mgrid[0:13, 0:8].T.reshape(-1, 2)
 
@@ -46,6 +53,10 @@ def find_chessboard_corners(images, scale):
 def undistort_images(images, K, dist):
     """
     Undistort the images using the camera matrix and distortion coefficients.
+
+    :param images: List of image paths.
+    :param K: Camera matrix.
+    :param dist: Distortion coefficients.
     """
     sample = cv.imread(images[0])
     h, w = sample.shape[:2]
@@ -64,6 +75,11 @@ def undistort_images(images, K, dist):
 def draw(img, corners, imgpts):
     """
     Draw the 3D axis on the image.
+
+    :param img: Image to draw on.
+    :param corners: Corners of the chessboard.
+    :param imgpts: Image points.
+    :return: Image with 3D axis drawn on it.
     """
     corner = tuple(corners[0].ravel().astype("int32"))
     imgpts = imgpts.astype("int32")
@@ -75,6 +91,11 @@ def draw(img, corners, imgpts):
 def calculate_pose(K, dist, images, scale):
     """
     Calculate the pose of the camera for each image and save the images.
+
+    :param K: Camera matrix.
+    :param dist: Distortion coefficients.
+    :param images: List of image paths.
+    :param scale: Scale factor for resizing the images.
     """
     objp = np.zeros((13*8, 3), np.float32)
     objp[:, :2] = np.mgrid[0:14, 0:9].T.reshape(-1, 2)
@@ -102,6 +123,11 @@ def calculate_pose(K, dist, images, scale):
 def save_params(rvecs, tvecs, K, dist):
     """
     Save the camera parameters to a text file.
+
+    :param rvecs: Rotation vectors.
+    :param tvecs: Translation vectors.
+    :param K: Camera matrix.
+    :param dist: Distortion coefficients.
     """
     os.makedirs("../Result", exist_ok=True)
     with open('../Result/camera_parameters_new.txt', 'w') as f:
@@ -114,30 +140,17 @@ def save_params(rvecs, tvecs, K, dist):
             f.write(f"Rotation Matrix:\n{R}\n")
             f.write(f"Translation Vector:\n{tvec}\n")
 
-# --- Main Execution ---
-
 criteria = (cv.TERM_CRITERIA_EPS + cv.TERM_CRITERIA_MAX_ITER, 30, 0.001)
 
-# Scale = 1.0 means 1280x800 is used directly; change to <1.0 if you want to downscale
 scale = 1.0
 
-# Update this path to your actual images
 images = glob.glob('../Result/ownChessImages/*.png')
 print(f"Found {len(images)} images.")
 
-# Calibrate
 ret, K, dist, rvecs, tvecs, objpoints, imgpoints = find_chessboard_corners(images, scale)
 
-# Undistort (optional)
-# undistort_images(images, K, dist)
-
-# Pose estimation (optional)
-# calculate_pose(K, dist, images, scale)
-
-# Save camera parameters
 save_params(rvecs, tvecs, K, dist)
 
-# Debug
 print("Calibration successful.")
 print("K =", K)
 print("dist =", dist)

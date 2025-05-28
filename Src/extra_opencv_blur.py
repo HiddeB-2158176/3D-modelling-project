@@ -3,6 +3,14 @@ import numpy as np
 import glob
 
 def box_blur(img, k=1):
+    """
+    Apply a box blur to the input image using a kernel of size k x k.
+
+    :param img: Input image in BGR format.
+    :param k: Size of the kernel (must be odd).
+    :return: Blurred image.
+    """
+
     pad = k // 2
     img_padded = np.pad(img, ((pad, pad), (pad, pad), (0, 0)), mode='reflect')
     out = np.zeros_like(img)
@@ -24,11 +32,9 @@ if __name__ == "__main__":
         images0.append(resized0)
         images1.append(resized1)
     
-    # Load color images for final visualization
     img1Color = cv2.resize(cv2.imread(images_view0[0], cv2.IMREAD_COLOR), (960, 540))
     img2Color = cv2.resize(cv2.imread(images_view1[0], cv2.IMREAD_COLOR), (960, 540))
 
-    # Apply box blur
     blurred_img = box_blur(img1Color, k=10)
     blurred_img_cv2 = cv2.blur(img1Color, (10, 10))
 

@@ -17,6 +17,12 @@ from step_3 import compute_essential_matrix, triangulate_opencv, triangulate_man
 def create_depth_map(points_3D, colors, img_shape, pts1):
     """
     Create a depth map from the 3D points.
+
+    :param points_3D: 3D points triangulated from the two views.
+    :param colors: Colors associated with the 3D points.
+    :param img_shape: Shape of the image (height, width, channels).
+    :param pts1: 2D points from the first camera view.
+    :return: Depth map as a 2D numpy array.s
     """
     print("Image shape:", img_shape)
     depth_map = np.zeros(img_shape[:2], dtype=np.float32)
@@ -32,6 +38,8 @@ def create_depth_map(points_3D, colors, img_shape, pts1):
 def visualize_depth_map(depthMap):
     """
     Visualize the depth map.
+
+    :param depthMap: Depth map to visualize.
     """
     plt.imshow(depthMap, cmap='gray')
     plt.colorbar()
@@ -39,6 +47,13 @@ def visualize_depth_map(depthMap):
 
 # Create color scale legend
 def add_color_scale(image):
+    """
+    Add a color scale legend to the image for depth visualization.
+
+    :param image: Input image to overlay the color scale.
+    :return: Image with color scale legend added.
+    """
+
     # Create gradient bar
     height, width = image.shape[:2]
     legend_height = 30
@@ -69,6 +84,17 @@ def add_color_scale(image):
     return image
 
 def interpolate_camera_view_static(R1, R2, t1, t2, alpha, lateral_offset=0):
+    """
+    Interpolate between two camera poses with forward/backward and lateral movement.
+    :param R1: Rotation matrix of the first camera.
+    :param R2: Rotation matrix of the second camera.
+    :param t1: Translation vector of the first camera.
+    :param t2: Translation vector of the second camera.
+    :param alpha: Interpolation factor (0.0 to 1.0).
+    :param lateral_offset: Lateral movement offset (positive for right, negative for left).
+    :return: Interpolated rotation matrix and translation vector.
+    """
+
     # Convert matrices to Rotation objects
     r1 = ScipyRotation.from_matrix(R1)
     r2 = ScipyRotation.from_matrix(R2)
@@ -102,6 +128,18 @@ def interpolate_camera_view_static(R1, R2, t1, t2, alpha, lateral_offset=0):
     return r_interp.as_matrix(), t_interp
 
 def switch_camera_view_static(R, T, K, pts1, pts2, points_3D, colors, img_shape):
+    """
+    Switch camera view with forward/backward and lateral movement.
+    :param R: Rotation matrix of the camera.
+    :param T: Translation vector of the camera.
+    :param K: Camera intrinsic matrix.
+    :param pts1: 2D points from the first camera view.
+    :param pts2: 2D points from the second camera view.
+    :param points_3D: 3D points triangulated from the two views.
+    :param colors: Colors associated with the 3D points.
+    :param img_shape: Shape of the image (height, width, channels).
+    """
+
     alpha = 0.0       # Forward/backward interpolation factor
     lateral = 0.0     # Left/right movement factor
     R_base, T_base = np.eye(3), np.zeros((3, 1))  # Initial camera pose
@@ -195,6 +233,18 @@ def switch_camera_view_static(R, T, K, pts1, pts2, points_3D, colors, img_shape)
     cv2.waitKey(1)
 
 def interpolate_camera_view_dynamic(R1, R2, t1, t2, alpha, lateral_offset=0):
+    """
+    Interpolate between two camera poses with forward/backward and lateral movement.
+
+    :param R1: Rotation matrix of the first camera.
+    :param R2: Rotation matrix of the second camera.
+    :param t1: Translation vector of the first camera.
+    :param t2: Translation vector of the second camera.
+    :param alpha: Interpolation factor (0.0 to 1.0).
+    :param lateral_offset: Lateral movement offset (positive for right, negative for left).
+    :return: Interpolated rotation matrix and translation vector.
+    """
+
     # Convert matrices to Rotation objects
     r1 = ScipyRotation.from_matrix(R1)
     r2 = ScipyRotation.from_matrix(R2)
@@ -228,6 +278,18 @@ def interpolate_camera_view_dynamic(R1, R2, t1, t2, alpha, lateral_offset=0):
     return r_interp.as_matrix(), t_interp
 
 def switch_camera_view_dynamic(R, T, K, pts1, pts2, points_3D, colors, img_shape):
+    """
+    Switch camera view dynamically with forward/backward and lateral movement.
+    :param R: Rotation matrix of the camera.
+    :param T: Translation vector of the camera.
+    :param K: Camera intrinsic matrix.
+    :param pts1: 2D points from the first camera view.
+    :param pts2: 2D points from the second camera view.
+    :param points_3D: 3D points triangulated from the two views.
+    :param colors: Colors associated with the 3D points.
+    :param img_shape: Shape of the image (height, width, channels).
+    """
+
     alpha = 0.0       # Forward/backward interpolation factor
     lateral = 0.0     # Left/right movement factor
     R_base, T_base = np.eye(3), np.zeros((3, 1))  # Initial camera pose
@@ -348,83 +410,13 @@ def switch_camera_view_dynamic(R, T, K, pts1, pts2, points_3D, colors, img_shape
     cv2.destroyAllWindows()
     cv2.waitKey(1)
 
-# def plane_sweep(R, T, K, img1, img2, disparity_range=20):
-#     """
-#     Perform plane sweeping to create a depth map.
-    
-#     Parameters:
-#     - R: Rotation matrix of the second camera.
-#     - T: Translation vector of the second camera.
-#     - K: Camera intrinsic matrix.
-#     - img1: Left image (grayscale).
-#     - img2: Right image (grayscale).
-#     - disparity_range: The number of disparity levels to sweep over.
-    
-#     Returns:
-#     - depth_map: Computed depth map using plane sweeping.
-#     """
-
-#     # Image dimensions
-#     h, w = img1.shape[:2]
-
-#     # Initialize depth and cost volume
-#     depth_map = np.zeros((h, w), dtype=np.float32)
-#     cost_volume = np.full((h, w, disparity_range), np.inf)  # Store cost for each depth hypothesis
-
-#     # Define depth values (inverse depth values for proper disparity)
-#     depth_values = np.linspace(0.1, 2.0, disparity_range)  # Adjust based on scene scale
-
-#     # Convert the extrinsic parameters into a projection matrix
-#     P1 = K @ np.hstack((np.eye(3), np.zeros((3, 1))))  # First camera (identity pose)
-#     P2 = K @ np.hstack((R, T))  # Second camera (transformed pose)
-
-#     for d_idx, depth in enumerate(depth_values):
-#         # Create a disparity map for the current depth
-#         disparity = 1.0 / depth  # Simulating inverse depth
-
-#         # Compute the transformation for the corresponding disparity
-#         pts1_homogeneous = np.vstack((np.indices((h, w)).reshape(2, -1), np.ones((1, h * w))))
-#         pts1_3D = np.linalg.inv(K) @ pts1_homogeneous * depth  # Convert pixels to 3D
-
-#         # Project points onto second image
-#         pts2_3D = R @ pts1_3D + T
-#         pts2_homogeneous = K @ pts2_3D
-#         pts2 = pts2_homogeneous[:2] / pts2_homogeneous[2]  # Normalize homogeneous coordinates
-
-#         # Reshape points back into image format
-#         pts1_reshaped = pts1_homogeneous[:2].reshape(2, h, w).astype(np.float32)
-#         pts2_reshaped = pts2.reshape(2, h, w).astype(np.float32)
-
-#         # Compute image similarity using SSD (Sum of Squared Differences)
-#         warped_img2 = cv2.remap(img2, pts2_reshaped[0], pts2_reshaped[1], cv2.INTER_LINEAR)
-#         ssd = (img1 - warped_img2) ** 2  # SSD cost metric
-
-#         # Store the cost at the current depth level
-#         cost_volume[:, :, d_idx] = ssd
-
-#     # Find the best depth by selecting the lowest cost per pixel
-#     best_depth_idx = np.argmin(cost_volume, axis=2)
-#     depth_map = depth_values[best_depth_idx]  # Convert index to actual depth values
-
-#     # Normalize for visualization
-#     depth_map = cv2.normalize(depth_map, None, 0, 255, cv2.NORM_MINMAX).astype(np.uint8)
-
-#     return depth_map
-
-import numpy as np
-import cv2
-
 def compute_scene_depth_bounds(point_cloud):
     """
     Computes the depth range based on the center of the point cloud.
     This helps in defining the depth planes.
     
-    Args:
-        point_cloud (numpy array): Nx3 array representing the point cloud.
-
-    Returns:
-        depth_min (float): Minimum depth.
-        depth_max (float): Maximum depth.
+    :param point_cloud: Nx3 numpy array representing the 3D point cloud.
+    :return: Tuple of (depth_min, depth_max, center_depth)
     """
     center = np.mean(point_cloud, axis=0)  # Compute center of the scene
     depths = point_cloud[:, 2]  # Extract Z (depth) values
@@ -438,15 +430,12 @@ def generate_depth_planes(depth_min, depth_max, center_depth, num_planes=50, off
     """
     Generate depth planes based on center of the point cloud.
 
-    Args:
-        depth_min (float): Minimum depth value.
-        depth_max (float): Maximum depth value.
-        center_depth (float): Depth value at the center of the scene.
-        num_planes (int): Number of depth planes to sample.
-        offset_factor (float): Factor to control how far the planes extend from the center.
-
-    Returns:
-        depths (numpy array): List of depth values for planes.
+    :param depth_min: Minimum depth value.
+    :param depth_max: Maximum depth value.
+    :param center_depth: Center depth value.
+    :param num_planes: Number of depth planes to generate.
+    :param offset_factor: Factor to determine the offset around the center depth.
+    :return: Array of depth values for the planes.
     """
     # Calculate an offset around the center depth
     depth_offset = (depth_max - depth_min) * offset_factor
@@ -461,13 +450,9 @@ def back_project_to_3D(image_corners, camera_matrix, depth):
     """
     Back-projects 2D image points to a 3D plane at a given depth.
 
-    Args:
-        image_corners (numpy array): 2D pixel coordinates of the image corners.
-        camera_matrix (numpy array): Intrinsic camera matrix.
-        depth (float): Depth plane at which to back-project.
-
-    Returns:
-        numpy array: 3D coordinates of the projected points.
+    :param camera_matrix: Intrinsic camera matrix.
+    :param depth (float): Depth plane at which to back-project.
+    :return: 3D coordinates of the projected points.
     """
     K_inv = np.linalg.inv(camera_matrix)  # Invert camera matrix
     homog_corners = np.hstack((image_corners, np.ones((4, 1))))  # Convert to homogeneous
@@ -479,6 +464,10 @@ def back_project_to_3D(image_corners, camera_matrix, depth):
 def compute_homography(K, depth):
     """
     Computes the homography matrix for a given camera intrinsic matrix K and depth plane.
+
+    :param K: Camera intrinsic matrix.
+    :param depth: Depth at which to compute the homography.
+    :return: Homography matrix H.
     """
 
     # Define 4 canonical 2D points (image plane corners in homogeneous coordinates)
@@ -514,13 +503,10 @@ def warp_image(image, H, output_size):
     """
     Warp an image using the given homography matrix.
 
-    Args:
-        image (numpy array): Input image.
-        H (numpy array): Homography matrix.
-        output_size (tuple): Output image dimensions (width, height).
-
-    Returns:
-        numpy array: Warped image.
+    :param image: Input image.
+    :param H: Homography matrix.
+    :param output_size: Output image dimensions (width, height).
+    :return: Warped image.
     """
     return cv2.warpPerspective(image, H, output_size)
 
@@ -528,46 +514,11 @@ def compute_reprojection_error(image1, image2):
     """
     Compute pixel-wise absolute difference between two images.
 
-    Args:
-        image1 (numpy array): First image.
-        image2 (numpy array): Second image.
-
-    Returns:
-        numpy array: Absolute difference image.
+    :param image1: First input image.
+    :param image2: Second input image.
+    :return: Image showing the absolute difference between the two images.
     """
     return cv2.absdiff(image1, image2)
-
-def sweep_depth_planes(img1, img2, K, point_cloud, num_planes=10):
-    h, w, _ = img1.shape  # Ensure input images are color (HxWx3)
-
-    # Compute the depth bounds and center
-    depth_min, depth_max, center_depth = compute_scene_depth_bounds(point_cloud)
-    
-    # Generate depth planes based on the center of the point cloud
-    depth_planes = generate_depth_planes(depth_min, depth_max, center_depth, num_planes)
-    
-    best_errors = np.full((h, w), np.inf)  # Track minimum error per pixel
-    best_colors = np.zeros((h, w, 3), dtype=np.uint8)  # Store best color reconstruction
-
-    for depth in depth_planes:
-        # Step 1: Compute homography and warp img2 to img1 viewpoint at this depth
-        H = compute_homography(K, depth)  # Implement based on plane-sweeping math
-        warped_img2 = cv2.warpPerspective(img2, H, (w, h))  # Align to reference image
-        warped_img2_resized = cv2.resize(warped_img2, (960, 540)) 
-        cv2.imshow("Warped Image", warped_img2_resized)  # Display warped image for debugging
-        cv2.waitKey(0)
-        cv2.destroyAllWindows()
-        
-        # Step 2: Compute pixel-wise difference (error)
-        error = cv2.absdiff(img1, warped_img2)  # Difference between left and warped right
-        total_error = np.sum(error, axis=2)  # Sum over RGB channels
-        
-        # Step 3: Update best colors where error is minimal
-        mask = total_error < best_errors  # Pixels where this depth gives lower error
-        best_errors[mask] = total_error[mask]  # Update minimal error map
-        best_colors[mask] = warped_img2[mask]  # Assign the best-matching color pixels
-
-    return best_colors  # Final reconstructed virtual viewpoint
 
 
 if __name__ == "__main__":
@@ -609,16 +560,8 @@ if __name__ == "__main__":
 
     colors = get_colors(img1Color, img2Color, pts1, pts2)
 
-    # depthMap = create_depth_map(points_3D_opencv, colors, img1Color.shape, pts1)
-    # visualize_depth_map(depthMap)
+    depthMap = create_depth_map(points_3D_opencv, colors, img1Color.shape, pts1)
+    visualize_depth_map(depthMap)
 
-    # switch_camera_view_static(R, T, K, pts1, pts2, points_3D_opencv, colors, img1Color.shape)
-    # switch_camera_view_dynamic(R, T, K, pts1, pts2, points_3D_opencv, colors, img1Color.shape)
-
-    depth_map = sweep_depth_planes(img1ColorRGB, img2ColorRGB, K, points_3D_opencv, num_planes=10)
-    depth_map_colored = cv2.applyColorMap(depth_map.astype(np.uint8), cv2.COLORMAP_JET)
-    depth_map_resized = cv2.resize(depth_map, (960, 540))
-    plt.imshow(depth_map_resized)
-    plt.colorbar()
-    plt.show()
-    visualize_depth_map(depth_map)
+    switch_camera_view_static(R, T, K, pts1, pts2, points_3D_opencv, colors, img1Color.shape)
+    switch_camera_view_dynamic(R, T, K, pts1, pts2, points_3D_opencv, colors, img1Color.shape)

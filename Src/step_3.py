@@ -275,7 +275,6 @@ def create_mesh_from_pointcloud(pcd, method='poisson', depth=8, radii=[0.005, 0.
     if method == 'poisson':
         print(f"Running Poisson reconstruction with depth={depth}...")
         mesh, densities = o3d.geometry.TriangleMesh.create_from_point_cloud_poisson(pcd, depth=depth)
-        # Optionally crop mesh based on density threshold
         vertices_to_remove = densities < np.quantile(densities, 0.01)
         mesh.remove_vertices_by_mask(vertices_to_remove)
         return mesh
@@ -388,7 +387,7 @@ if __name__ == "__main__":
     pcd.colors = o3d.utility.Vector3dVector(colors_unique)
 
     # Generate mesh from point cloud
-    mesh = create_mesh_from_pointcloud(pcd, method='ball_pivoting', depth=9)
+    mesh = create_mesh_from_pointcloud(pcd, method='poisson', depth=9)
 
     # Visualize the mesh
     print("Visualizing mesh...")
