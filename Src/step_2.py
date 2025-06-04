@@ -140,7 +140,9 @@ def get_image_paths(number_of_cameras):
     """
     images = []
     for i in range(number_of_cameras):
-        images.append(glob.glob(f'../Data/GrayCodes/view{i}/*.jpg'))
+        # images.append(glob.glob(f'../Data/GrayCodes/view{i}/*.jpg'))
+        #! For 3 cameras, uncomment the line below
+        images.append(glob.glob(f'../Result/ownDataset1//view{i}/*.png'))
 
     return images
 

@@ -121,8 +121,8 @@ def visualize_cameras_pyramids(positions):
 
         # Combine the rotation and translation into a single transformation matrix
         transform = np.eye(4)
-        transform[:3, :3] = R
-        transform[:3, 3] = T.T
+        transform[:3, :3] = pos[0]  # Rotation matrix
+        transform[:3, 3] = pos[1].T  # Translation vector
 
         # Apply the transformation to the pyramid for the second camera
         camera.transform(transform)
@@ -318,6 +318,8 @@ if __name__ == "__main__":
     color_images = []
     for i in range(len(results)):
         color_images.append(cv2.resize(cv2.imread(image_paths[i][0], cv2.IMREAD_COLOR), (1920, 1080)))
+        #! for 3 camera, we need image 40 as color
+        # color_images.append(cv2.resize(cv2.imread(image_paths[i][40], cv2.IMREAD_COLOR), (1920, 1080)))
 
     correspondences = find_correspondences_n_cameras(results)
 
