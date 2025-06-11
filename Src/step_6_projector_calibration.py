@@ -11,6 +11,14 @@ def get_3d_points_from_camera_view_of_projected_pattern(img_path, K_cam, D_cam,
     """
     Processes a camera image of a physical chessboard with a projected pattern.
     Calculates 3D world coordinates of projected corners.
+
+    :param img_path: Path to the camera image.
+    :param K_cam: Camera intrinsic matrix.
+    :param D_cam: Camera distortion coefficients.
+    :param physical_chessboard_objp_3D: 3D object points of the physical chessboard.
+    :param physical_board_dims: Dimensions of the physical chessboard (rows, cols).
+    :param projected_pattern_dims: Dimensions of the projected pattern (rows, cols).
+    :return: Tuple of 3D points in world coordinates and refined 2D corners in camera image.
     """
     img = cv.imread(img_path)
     if img is None:
@@ -72,6 +80,16 @@ def calibrate_projector_as_camera(camera_images_paths, K_cam, D_cam,
                                   projector_resolution):
     """
     Calibrates the projector using images from a calibrated camera.
+
+    :param camera_images_paths: List of paths to camera images.
+    :param K_cam: Camera intrinsic matrix.
+    :param D_cam: Camera distortion coefficients.
+    :param physical_chessboard_objp_3D: 3D object points of the physical chessboard.
+    :param physical_board_dims: Dimensions of the physical chessboard (rows, cols).
+    :param projector_pattern_points_2D: 2D points of the projected pattern in projector's image coordinates.
+    :param projected_pattern_dims: Dimensions of the projected pattern (rows, cols).
+    :param projector_resolution: Resolution of the projector (width, height).
+    :return: Tuple of calibration results (ret, K_proj, D_proj, rvecs_proj, tvecs_proj).
     """
     all_object_points_for_projector_calib = [] # 3D points in world coordinates
     all_image_points_for_projector_calib = []  # 2D points in projector's "image" coordinates

@@ -37,6 +37,11 @@ def get_diff(images, treshold=30):
 def validate_pixels(img0, img1, treshhold=50):
     """
     Validate pixels in the images based on the difference between them.
+
+    :param img0: First image.
+    :param img1: Second image.
+    :param treshhold: Treshold for the difference between the images.
+    :return: Mask of valid pixels (1 for valid, 0 for invalid).
     """
     # Get the difference between the images
     diff = cv2.absdiff(img0, img1)
@@ -52,7 +57,6 @@ def decode_gray_pattern(images, treshhold=30):
     :param treshhold: Treshold for the difference between the images.
     :return: List of (x, y, identifier) for each pixel in the images.
     """
-    # Validate pixels
     valid_mask = validate_pixels(images[0], images[1])
 
     height, width = images[0].shape

@@ -17,7 +17,6 @@ def compute_essential_matrix(keypoints1, keypoints2, matches, K):
     
     :param keypoints1: OpenCV keypoints in camera 1
     :param keypoints2: OpenCV keypoints in camera 2
-    :param matches: Lijst van overeenkomende punten (cv2.DMatch)
     :param matches: List of matching points (cv2.DMatch)
     :param K: Camera calibration matrix (3x3 numpy array)
     :return: Essential matrix E
@@ -27,7 +26,6 @@ def compute_essential_matrix(keypoints1, keypoints2, matches, K):
     pts1 = np.float32([keypoints1[m.queryIdx].pt for m in matches])
     pts2 = np.float32([keypoints2[m.trainIdx].pt for m in matches])
 
-    # Calculate the essential matrix
     E, mask = cv2.findEssentialMat(pts1, pts2, K, method=cv2.RANSAC, prob=0.999, threshold=1.0)
 
     return E, mask, pts1, pts2
@@ -58,7 +56,7 @@ def create_camera_pyramid(size=0.1):
     pyramid.vertices = o3d.utility.Vector3dVector(vertices)
     pyramid.triangles = o3d.utility.Vector3iVector(faces)
     
-    pyramid.paint_uniform_color([0.9, 0.2, 0.2])  # Red color
+    pyramid.paint_uniform_color([0.9, 0.2, 0.2]) 
 
     return pyramid
 
@@ -75,8 +73,7 @@ def visualize_cameras_axises(positions):
     """
     Visualize the cameras with axises.
 
-    :param R: Rotation matrix
-    :param T: Translation vector
+    :param positions: List of tuples containing rotation matrix and translation vector for each camera
     """
     vis = o3d.visualization.VisualizerWithKeyCallback()
     vis.create_window()
@@ -105,8 +102,7 @@ def visualize_cameras_pyramids(positions):
     """
     Visualize the cameras with pyramids.
 
-    :param R: Rotation matrix
-    :param T: Translation vector
+    :param positions: List of tuples containing rotation matrix and translation vector for each camera
     """
     vis = o3d.visualization.VisualizerWithKeyCallback()
     vis.create_window()
@@ -388,10 +384,8 @@ if __name__ == "__main__":
     pcd.points = o3d.utility.Vector3dVector(pts_unique)
     pcd.colors = o3d.utility.Vector3dVector(colors_unique)
 
-    # Generate mesh from point cloud
     mesh = create_mesh_from_pointcloud(pcd, method='poisson', depth=9)
 
-    # Visualize the mesh
     print("Visualizing mesh...")
     visualize_mesh_with_callback(mesh)
 
