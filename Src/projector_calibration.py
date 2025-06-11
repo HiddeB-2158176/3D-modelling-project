@@ -94,9 +94,6 @@ def calibrate_projector_as_camera(camera_images_paths, K_cam, D_cam,
         return False, None, None, None, None
 
     print(f"Calibrating projector with {len(all_object_points_for_projector_calib)} valid views.")
-    # Note: cv.CALIB_FIX_PRINCIPAL_POINT might be useful if principal point is known/centered
-    # flags = cv.CALIB_ZERO_TANGENT_DIST | cv.CALIB_FIX_K1 | cv.CALIB_FIX_K2 | cv.CALIB_FIX_K3 
-    # Consider adding flags if distortion is minimal or specific parameters are fixed.
     ret, K_proj, D_proj, rvecs_proj, tvecs_proj = cv.calibrateCamera(
         all_object_points_for_projector_calib,
         all_image_points_for_projector_calib,
@@ -116,13 +113,9 @@ def save_projector_params(rvecs, tvecs, K, dist, filepath):
             f.write(f"Translation Vector (t_world_to_proj):\n{tvec}\n")
 
 if __name__ == "__main__":
-    # --- User-defined parameters ---
     # These must be obtained from your prior camera calibration (e.g., from a file or step_1.py)
     K_cam_calibrated = np.array([[1000, 0, 640], [0, 1000, 360], [0, 0, 1]], dtype=np.float32) # Placeholder
     D_cam_calibrated = np.array([0.0, 0.0, 0.0, 0.0, 0.0], dtype=np.float32) # Placeholder: [k1, k2, p1, p2, k3]
-
-    # Path to images taken by the calibrated camera, showing projected patterns on a physical chessboard
-    # Example: camera_images_paths_for_proj_calib = glob.glob('../Data/ProjectorCalibrationImagesSet/*.jpg')
     camera_images_paths_for_proj_calib = glob.glob('../Data/GrayCodes/chess/*.jpg') # Placeholder: Update this path
     
     if not K_cam_calibrated.any() or not D_cam_calibrated.any():
@@ -133,25 +126,17 @@ if __name__ == "__main__":
         exit()
     print(f"Found {len(camera_images_paths_for_proj_calib)} images for projector calibration.")
 
-    # Physical chessboard parameters (the one visible in camera_images_paths_for_proj_calib)
-    physical_board_dims = (7, 9) # (cols, rows) of internal corners
-    square_size_physical_board = 0.025 # side length of a square in meters (e.g., 25mm)
+    physical_board_dims = (7, 9)
+    square_size_physical_board = 0.025
     physical_chessboard_objp_3D = np.zeros((physical_board_dims[0] * physical_board_dims[1], 3), np.float32)
     physical_chessboard_objp_3D[:, :2] = np.mgrid[0:physical_board_dims[0], 0:physical_board_dims[1]].T.reshape(-1, 2) * square_size_physical_board
 
-    # Projector's pattern parameters (e.g., a digital chessboard it projects)
-    projected_pattern_dims = (7, 9) # (cols, rows) of internal corners in the projected pattern
+    projected_pattern_dims = (7, 9) 
     projector_pattern_points_2D = np.zeros((projected_pattern_dims[0] * projected_pattern_dims[1], 2), np.float32)
-    # These are 2D points in the projector's "image" (pixel coordinates).
-    # Example: if projecting a 7x9 pattern, points are (0,0), (1,0)...(6,0), (0,1)...(6,8)
-    # Adjust if your pattern is scaled, offset, or uses different units in projector's frame.
     projector_pattern_points_2D[:, :2] = np.mgrid[0:projected_pattern_dims[0], 0:projected_pattern_dims[1]].T.reshape(-1, 2) 
-    # If your projected pattern's corners are at specific pixel locations, define them here. E.g., if each square is 50 pixels:
-    # projector_pattern_points_2D[:, :2] = np.mgrid[0:projected_pattern_dims[0], 0:projected_pattern_dims[1]].T.reshape(-1, 2) * 50
 
-    projector_resolution = (1920, 1080) # (width, height) of projector
+    projector_resolution = (1920, 1080) 
     output_params_filepath = '../Result/projector_parameters.txt'
-    # --- End of User-defined parameters ---
 
     print("Starting projector calibration...")
     ret_proj, K_proj, D_proj, rvecs_proj, tvecs_proj = calibrate_projector_as_camera(
